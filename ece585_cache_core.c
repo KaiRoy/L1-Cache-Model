@@ -1,7 +1,7 @@
 /*
  ============================================================================
  Name        : ece585_cache_fp.c
- Author      : Kai Roy, Daisy Perez-Ruiz, Kamal Smith, Nicholas Allmeyer, Jesus Zavala
+ Author      : Kai Roy
  Version     :
  Copyright   : Your copyright notice
  Description : Hello World in C, Ansi-style
@@ -13,19 +13,21 @@
 
 
 //Cache Structure
-#define DWAYNUM 3
+#define DWAYNUM 8
 #define IWAYNUM 4
-#define DCACHESIZE 4
-#define ICACHESIZE 4
+#define DCACHESIZE 16384
+#define ICACHESIZE 16384
+#define BYTEOFFSETSIZE 64
+
 
 enum MESI{M, E, S, I};
 
 struct way {
 	unsigned short valid;
 	unsigned int tag;
-
 	enum MESI mesi;
 	unsigned int LRU;
+	unsigned short data[BYTEOFFSETSIZE];
 };
 
 union byteLine {
@@ -33,11 +35,24 @@ union byteLine {
 	struct way iWay[IWAYNUM];
 };
 
+struct address {
+	unsigned int tag;
+	unsigned int index;
+	unsigned int byteOffest;
+}
+
 
 
 //Function Definitions
 void initCache(union byteLine *cache, int cacheSize, char type);
 int findInvalidWay(union byteLine var, char type);
+int readFromDCache(union byteLine *cache, struct address addr);
+int writeToDCache(union byteLine *cache, struct address addr, int data);
+int instrFetch(union byteLine *cache, struct address addr);
+int invalidL2(union byteLine *cache, struct address addr);
+int dataReqL2(union byteLine *cache, struct address addr);
+int clearCache(union byteLine *cache);
+int printCahce(union byteLine *cache);
 
 
 //Main Function
@@ -105,3 +120,42 @@ int findInvalidWay(union byteLine var, char type){
 
 
 
+int readFromDCache(union byteLine *cache, struct address addr) {
+
+}
+
+
+
+int writeToDCache(union byteLine *cache, struct address addr, int data) {
+
+}
+
+
+
+int instrFetch(union byteLine *cache, struct address addr) {
+
+}
+
+
+
+int invalidL2(union byteLine *cache, struct address addr); {
+
+}
+
+
+
+int dataReqL2(union byteLine *cache, struct address addr) {
+
+}
+
+
+
+int clearCache(union byteLine *cache) {
+
+}
+
+
+
+int printCahce(union byteLine *cache) {
+
+}
