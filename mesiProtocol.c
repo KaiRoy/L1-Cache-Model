@@ -22,6 +22,8 @@ bool snoopBit = 0; //Creating a boolean snoop variable that will update to true/
 bool readingData = 0; //get value from readDataL1
 bool writingData = 0; //get value from writeDataL1
 bool invalidateData = 0; //get value from invComL2
+bool simulatingL2cache = 0;  //creating a place holder for deciding if we want to simulate the L2 cache.
+
 
 //creating possible state for the MESI protocol
 enum MESI_STATE{
@@ -101,7 +103,48 @@ void reading_N_Adress(enum NAddress N){
 
 //Create functions for reading the value
 int readDataL1(){
-		return readingData = 1;
+
+    int checkingWay = -1; //need to initialize to -1 since this will be used to check the way in the cache
+        //checking to see if the cache is empty or not
+        for(int i = 0; i < DWAYNUM; i++){
+            if(dCache[addr.index].dWay[i].tag == 0)
+                checkingWay = i; //we will assign the checkingWay the current way number
+        }
+
+        //we have checked that current way, thus we will need to update the current way with the new information and change the MESI state to 'E' (EXLCUSIVE).
+        if(checkingWay >= 0){
+            //**Need to add code for adding the index value to the current way
+            dCache[addr.index].dWay[checkingWay].mesi = 'E'; //need to change it to E state since the first write will be write through
+
+            if(simulatingL2cache){
+                printf("Read from L2 < %X >\n", addr);
+            }
+        }
+        //if the checkingWay does not see an empty way, we need to check for MISS
+        else if (checkingWay < 0){
+                if ((checkingWay < 0) && (dCache[addr.index].dWay[checkingWay].mesi != 'I')){
+                    //We checked the array, we see that it is not empty (checkingWay will be -1) and it is not currently invalid
+                    //**need to add code to replace the LRU and evict it
+                    if(simulatingL2cache){
+                        printf("Read from L2 < %X >\n", addr);
+                    }
+                }
+                else{
+                    printf("MESI State is invalid.");
+                    return -1;
+                }
+        }
+        //We got a read HIT, we need to move to the next state that is given in the state diagram
+        else{
+                 //checking for the current MESI state for the index **WILL PROBABLY NEED TO ADD CODE ON WHAT TO DO WITH CACHE DETAILS
+                switch (dCache[addr.index].dWay[checkingWay].mesi){
+                    case 'M': dCache[addr.index].dWay[checkingWay].mesi = 'M'; break;//If we are reading and current state is 'M' (MODIFIED) we will go back to 'M'
+                    case 'E': dCache[addr.index].dWay[checkingWay].mesi = 'S'; break;//If we are reading and current state is 'E' (EXCLUSIVE) we will go back to 'S' --> this is from the project explanation (considering this as read from other processor)
+                    case 'S': dCache[addr.index].dWay[checkingWay].mesi = 'S'; break;//If we are reading and current state is 'S' (SHARED) we will go back to 'S'
+                    case 'I': dCache[addr.index].dWay[checkingWay].mesi = 'S'; break;//If we are reading and current state is 'I' (INVALID) we will go to 'S'
+                }
+        }
+return 0;
 }
 
 int writeDataL1(){
