@@ -33,10 +33,10 @@ I
 
 enum NAddress{
 READ = 0, //Read data request to L1 data cache
-WRITE, //Write data request to L1 data cache
-FETCH, //Instruction fetch (a read request to L1 instruction cache)
-INVALIDATE, //invalidate command from L2
-REQUEST, //data request from L2 (in response to snoop)
+WRITE = 1, //Write data request to L1 data cache
+FETCH = 2, //Instruction fetch (a read request to L1 instruction cache)
+INVALIDATE = 4, //invalidate command from L2
+REQUEST = 5, //data request from L2 (in response to snoop)
 CLEAR = 8, // clear the cache and reset all state (and statistic)
 PRINT = 9, //print contents and state of the cache (allow subsequent trace activity)
 };
@@ -47,6 +47,24 @@ struct address{
 	unsigned int index;
 	unsigned int byteOffest;
 };
+
+struct way {
+	unsigned short valid;
+	unsigned int tag;
+	enum MESI_STATE mesi;
+	int LRU;
+	unsigned short data[BYTEOFFSETSIZE];
+};
+
+union byteLine {
+	struct way dWay[DWAYNUM];
+	struct way iWay[IWAYNUM];
+};
+
+
+// Create instruction and data cache
+union byteLine dCache[DCACHESIZE];
+union byteLine iCache[ICACHESIZE];
 
 // creating the portotype functions
 int MESI_Protocol(char mesiState, enum MESI_STATE state);
