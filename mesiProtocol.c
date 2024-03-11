@@ -25,10 +25,10 @@ bool invalidateData = 0; //get value from invComL2
 
 //creating possible state for the MESI protocol
 enum MESI_STATE{
-MODIFIED,
-EXCLUSIVE,
-SHARED,
-INVALID
+M,
+E,
+S,
+I
 };
 
 enum NAddress{
@@ -98,12 +98,30 @@ int invComL2(){
 		return invalidateData = 1;
 
 }
-int dataRqstL2(){
 
+int dataRqstL2(union byteLine *cache, struct address addr){  // Check the data cache
+    for (int i = 0; i < DWAYNUM; ++i) {
+        if(dCache[addr.index].dWay[i].tag == iCache[addr.index].iWay[i].tag) { //Compares to find tag of address to invalidate
+            switch (dCache[addr.index].dWay[i].mesi) {
+                case 'M': dCache[addr.index].dWay[i].mesi = 'I'; //changes MESI bit set to invalidate
+                case 'E': dCache[addr.index].dWay[i].mesi = 'I'; //changes MESI bit set to invalidate
+                case 'S': dCache[addr.index].dWay[i].mesi = 'I'; //changes MESI bit set to invalidate
+                case 'I': return 0; 		    //do nothing, already invalid
+            }
+        }
+    }
+    return 0;
 };
-void clearCache(){
 
+void clearCache(union byteLine *cache){ //clearing the cache line, will set all states to invalid
+    for(int i = 0; i < IWAYNUM; i++){ //setting the instruction cache to invalid
+        cache->iWay[i].mesi = 'I';
+ }
+    for(int j = 0; j < DWAYNUM; j++){ //setting the data cache to invalid
+        cache->dWay[j].mesi = 'I';
+    }
 };
+
 void printCont(){
 };
 
@@ -117,60 +135,57 @@ void printCont(){
 ************The function below will follow the state diagram that is shown in class************
 **********************************************************************************************/
 
-int MESI_Protocol(char mesiState, enum MESI_STATE state)
-{
-
-
+int MESI_Protocol(char mesiState, enum MESI_STATE state){
     //creating a local variable for the MESI character
     char S = mesiState;
 
 //Start of INVALID transitions
-    if ((state = INVALID) && (snoopBit = 1) && (readingData = 1)){ //If the current state of the cache is invalid but we are trying to read and the snooping found data in another processor
-        state = SHARED; //will change the state to SHARED and return the MESI character
+    if ((state = 'I') && (snoopBit = 1) && (readingData = 1)){ //If the current state of the cache is invalid but we are trying to read and the snooping found data in another processor
+        state = 'S'; //will change the state to SHARED and return the MESI character
         S = "S";
         return S;
 
-    }else if((state = INVALID) && (snoopBit = 0) && (readingData = 1)){ //If current state of cache is invalid, the snooping did not find anything but we are still trying to read.
-        state = EXCLUSIVE; //will change the state to EXCLUSIVE and return the MESI character
+    }else if((state = 'I') && (snoopBit = 0) && (readingData = 1)){ //If current state of cache is invalid, the snooping did not find anything but we are still trying to read.
+        state = 'E'; //will change the state to EXCLUSIVE and return the MESI character
         S = "E";
         return S;
 
-    }else if((state = INVALID) && (writingData = 1)){ //If current state of the cache is invalid, and the writing bit is currently 1.
-        state = MODIFIED; //will change the state to MODIFIED and return the MESI character
+    }else if((state = 'I') && (writingData = 1)){ //If current state of the cache is invalid, and the writing bit is currently 1.
+        state = 'M'; //will change the state to MODIFIED and return the MESI character
         S = "M";
         return S;
 //End of INVALID transitions
 
 //Start of EXCLUSIVE  transitions
-    }else if((state = EXCLUSIVE) && (readingData = 1)){
-        state = EXCLUSIVE;
+    }else if((state = 'E') && (readingData = 1)){
+        state = 'E';
         S = "E";
         return S;
 
-    }else if ((state = EXCLUSIVE)&& (writingData = 1)){
-        state = MODIFIED;
+    }else if ((state = 'E')&& (writingData = 1)){
+        state = 'M';
         S = "M";
         return S;
 //End of EXCLUSIVE transitions
 
 //Start of SHARED transitions
-    }else if((state = SHARED) && (readingData = 1)){
-        state = SHARED;
+    }else if((state = 'S') && (readingData = 1)){
+        state = 'S';
         S = "S";
         return S;
-    }else if ((state = SHARED) && (invalidateData = 1)){
-        state = MODIFIED;
+    }else if ((state = 'S') && (invalidateData = 1)){
+        state = 'M';
         S = "M";
         return S;
 //End of Exclusive transitions
 
 //Start of MODIFIED transitions
-    }else if((state = MODIFIED) && (readingData = 1)){
-        state = MODIFIED;
+    }else if((state = 'M') && (readingData = 1)){
+        state = 'M';
         S = "M";
         return S;
-    }else if((state = MODIFIED) && (writingData = 1)){
-        state = MODIFIED;
+    }else if((state = 'M') && (writingData = 1)){
+        state = 'M';
         S = "M";
         return S;
 //end of MODIFIED transitions
@@ -180,5 +195,5 @@ int MESI_Protocol(char mesiState, enum MESI_STATE state)
      exit(EXIT_FAILURE);
     }
 
-}
+};
 
