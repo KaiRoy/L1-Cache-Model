@@ -12,24 +12,43 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdbool.h>
 
 
 /****************************************************************************
-** LRU Macros
-****************************************************************************/
-//#define MRU_VAL             7
-
-/****************************************************************************
-** Trace Macros and Globals
+** Macros and Globals
 ****************************************************************************/
 // Macros
 #define TRACECHARLEN 9
 #define TRACEDATALEN 8
 #define MAXLEN 1000
+#define addrConst 8
 
 // Global variables
+// // Trace File
 int Tracen = 16;											//n
 int TraceData [TRACEDATALEN] = {16,16,16,16,16,16,16,16};	//address data
+
+// // MESI
+int addy [addrConst] = {16,16,16,16,16,16,16,16};			//addy will contain the address data that we will use for the MESI
+
+//bool snoopBit = 0; 				//Creating a boolean snoop variable that will update to true/1 if there are a write detected.
+//
+////will get the following global variables from the N address
+//bool readingData = 0; 			//get value from readDataL1
+//bool writingData = 0; 			//get value from writeDataL1
+//bool invalidateData = 0; 		//get value from invComL2
+//bool simulatingL2cache = 0;  	//creating a place holder for deciding if we want to simulate the L2 cache.
+
+enum NAddress{
+	READ = 0, 			//Read data request to L1 data cache
+	WRITE = 1, 			//Write data request to L1 data cache
+	FETCH = 2, 			//Instruction fetch (a read request to L1 instruction cache)
+	INVALIDATE = 4, 	//invalidate command from L2
+	REQUEST = 5, 		//data request from L2 (in response to snoop)
+	CLEAR = 8, 			//clear the cache and reset all state (and statistic)
+	PRINT = 9, 			//print contents and state of the cache (allow subsequent trace activity)
+};
 
 /****************************************************************************
 ** Cache Structure
@@ -40,12 +59,12 @@ int TraceData [TRACEDATALEN] = {16,16,16,16,16,16,16,16};	//address data
 #define ICACHESIZE 16384
 #define BYTEOFFSETSIZE 64
 
-enum MESI{M, E, S, I};
+enum MESI_STATE{M, E, S, I};
 
 struct way {
 	unsigned short valid;
 	unsigned int tag;
-	enum MESI mesi;
+	enum MESI_STATE mesi;
 	int LRU;
 	unsigned short data[BYTEOFFSETSIZE];
 };
@@ -67,18 +86,18 @@ union byteLine iCache[ICACHESIZE];
 
 
 /****************************************************************************
-** Function Declaration
+** Function Prototypes
 ****************************************************************************/
 // Cache / Cache Operations
 void initCache(union byteLine *cache, int cacheSize, char type);
 int findInvalidWay(union byteLine var, char type);
-int readFromDCache(union byteLine *cache, struct address addr);
-int writeToDCache(union byteLine *cache, struct address addr, int data);
-int instrFetch(union byteLine *cache, struct address addr);
-int invalidL2(union byteLine *cache, struct address addr);
-int dataReqL2(union byteLine *cache, struct address addr);
-int clearCache(union byteLine *cache);
-int printCache(union byteLine *cache);
+int readFromDCache(struct address addr);
+int writeToDCache(struct address addr, int data);
+int instrFetch(struct address addr);
+int invalidL2(struct address addr);
+int dataReqL2(struct address addr);
+int clearCache();
+int printCache();
 
 // Trace File Handling
 int TextToDecimal(char value);
@@ -91,9 +110,19 @@ int containshex(char string[]);                         //checks if a hex value 
 int ishexval(char val);                                  //verifies is a character is a hex value
 
 // LRU
-void LRU_Data(int request, struct address addr);
-void LRU_Instr(int request, struct address addr);
+int LRU_Data(struct address addr);
+int LRU_Instr(struct address addr);
 void print_byteline_state(const char* message, union byteLine var, char type);
+
+// MESI
+int MESI_Protocol(char mesiState, enum MESI_STATE state);
+//int readDataL1();
+//int writeDataL1(union byteLine *cache, struct address addr, int data);
+//int instFetch();
+//int invComL2();
+//int dataRqstL2();
+//void clearCache();
+//void printCont();
 
 
 /****************************************************************************
@@ -177,12 +206,12 @@ void initCache(union byteLine *cache, int cacheSize, char type) {
 		// Loop through every way/block
 		if (type == 'i') {		// Instruction cache
 			for (int j = 0; j < IWAYNUM; j++) {
-				cache[i].iWay[j].valid = 0;					// Change to MESI
+				cache[i].iWay[j].mesi = I;					// Change to MESI
 				cache[i].iWay[j].LRU = -1;
 			}
 		} else {				// Data cache
 			for (int j = 0; j < DWAYNUM; j++) {
-				cache[i].dWay[j].valid = 0;
+				cache[i].dWay[j].mesi = I;
 				cache[i].dWay[j].LRU = -1;
 			}
 		}
@@ -196,22 +225,48 @@ void initCache(union byteLine *cache, int cacheSize, char type) {
 ** Authors: Kai Roy
 ** Version: v1.0.0
 ** Description: Check if all ways are valid. Return -1 if there are no invalid
-** ways, else return the location of the first invalid way.
+** ways, else return the location of the lru invalid way.
 ****************************************************************************/
 int findInvalidWay(union byteLine var, char type){
+	int lru_loc = 0;
+	int invalid = 0;
+
 	// Loop through every way/block
-	if (type == 'i') {			// Instruction cache
-		for (int i = 0; i < IWAYNUM; i ++) {
-			if (!var.iWay[i].valid)		// Check valid bit
-				return i;
+	if (type == 'i') {
+		// Instruction cache
+		for (int i = 1; i < DWAYNUM; i++) {
+			if (!invalid) {			// For first invalid
+				if (var.iWay[i].mesi == I) {			// Check for invalid
+					lru_loc = i;
+					invalid = 1;
+				}
+			} else {				// For proceeding invalids
+				if (var.iWay[i].mesi == I && (var.iWay[i].LRU < var.iWay[lru_loc].LRU)) {
+					lru_loc = i;
+				}
+			}
 		}
-	} else { 					// Data cache
-		for (int i = 0; i < IWAYNUM; i ++) {
-			if (!var.dWay[i].valid)		// Check valid bit
-				return i;
+	} else {
+		// Data cache
+		for (int i = 1; i < DWAYNUM; i++) {
+			if (!invalid) {			// For first invalid
+				if (var.dWay[i].mesi == I) {			// Check for invalid
+					lru_loc = i;
+					invalid = 1;
+				}
+			} else {				// For proceeding invalids
+				if (var.dWay[i].mesi == I && (var.dWay[i].LRU < var.dWay[lru_loc].LRU)) {
+					lru_loc = i;
+				}
+			}
 		}
 	}
-	return -1;
+
+	if (!invalid) {
+		return -1;
+	} else {
+		return lru_loc;
+	}
 }
 
 
@@ -221,9 +276,20 @@ int findInvalidWay(union byteLine var, char type){
 ** Version: v1.0.0
 ** Description: Read data request to L1 data cache
 ****************************************************************************/
-int readFromDCache(union byteLine *cache, struct address addr) {
+int readFromDCache(struct address addr) {
 	//LRU_Data
-	//MESI Change?
+		//Checks for hit
+		//Check for Invalid first, then LRU of Invalid
+		//Checks for LRU
+	//MESI Change I -> E -> S
+
+	int way;
+	struct MESI_State state;
+	way = LRU_Data(addr);
+	state = MESI_Protocol(addr, way, 'd', 0, 1, 0, 0);
+
+	// Print to CMD?
+
 	return 0;
 }
 
@@ -234,9 +300,19 @@ int readFromDCache(union byteLine *cache, struct address addr) {
 ** Version: v1.0.0
 ** Description: Write data request to L1 data cache
 ****************************************************************************/
-int writeToDCache(union byteLine *cache, struct address addr, int data) {
-	//LRU_Data?
-	//MESI Change
+int writeToDCache(struct address addr, int data) {
+	//LRU_Data
+			//Checks for hit
+			//Check for Invalid first, then LRU of Invalid
+			//Checks for LRU
+	//MESI Change(s) I -> M, E -> M, ???
+	int way;
+	struct MESI_State state;
+	way = LRU_Data(addr);
+	state = MESI_Protocol(addr, way, 'd', 0, 0, 1, 0);
+
+	// Print to CMD?
+
 	return 0;
 }
 
@@ -247,9 +323,17 @@ int writeToDCache(union byteLine *cache, struct address addr, int data) {
 ** Version: v1.0.0
 ** Description: instruction fetch (a read request to L1 instruction cache)
 ****************************************************************************/
-int instrFetch(union byteLine *cache, struct address addr) {
-	//LRU_Instr?
-	//MESI Change?
+int instrFetch(struct address addr) {
+	//LRU_Instr
+			//Checks for hit
+			//Check for Invalid first, then LRU of Invalid
+			//Checks for LRU
+	//MESI Change(s) I -> E -> S ???
+	int way;
+	struct MESI_State state;
+	way = LRU_Instr(addr);
+	state = MESI_Protocol(addr, way, 'i', 0, 0, 1, 0);
+
 	return 0;
 }
 
@@ -260,9 +344,25 @@ int instrFetch(union byteLine *cache, struct address addr) {
 ** Version: v1.0.0
 ** Description: Invalidate command from L2
 ****************************************************************************/
-int invalidL2(union byteLine *cache, struct address addr) {
-	//MESI Change
-	return 0;
+int invalidL2(struct address addr) {
+	// Find Tag, save way
+	// MESI Change "Any State" -> I
+	struct MESI_State state;
+	int way = -1;					//Default value of -1
+
+	// Check for cache hit
+	for (int j = 0; j < DWAYNUM; j++) {														// Change to MESI Check, move this check outside of this func?
+		if (dCache[addr.index].dWay[j].tag == addr.tag && dCache[addr.index].dWay[j].mesi != I) {
+			way = j;
+			break;
+		}
+	}
+	 if (way != -1) {
+		 state = MESI_Protocol(addr, way, 'd', 0, 0, 0, 1);
+		 return EXIT_SUCCESS;
+	 } else {
+		 return EXIT_FAILURE;
+	 }
 }
 
 
@@ -275,6 +375,7 @@ int invalidL2(union byteLine *cache, struct address addr) {
 int dataReqL2(union byteLine *cache, struct address addr) {
 	//MESI Change
 	//???
+
 }
 
 
@@ -583,54 +684,82 @@ int ishexval(char val)
 ** Version: v1.0.0
 ** Description: LRU Handling for Data Cache
 ****************************************************************************/
-void LRU_Data(int request, struct address addr) {
+int LRU_Data(struct address addr) {
     int MRU_VAL = DWAYNUM - 1;
-	if (request >= 0 && request < 10) {		//For the commands 0-9 listed in the assignment
-        int located = -1;					//Default value of -1
+	int located = -1;					//Default value of -1
 
-        // Check for cache hit
-        for (int j = 0; j < DWAYNUM; j++) {														// Change to MESI Check, move this check outside of this func?
-            if (dCache[addr.index].dWay[j].tag == addr.tag && dCache[addr.index].dWay[j].valid == 1) {
-                located = j;
-                break;
-            }
-        }
+	// Check for cache hit
+	for (int j = 0; j < DWAYNUM; j++) {														// Change to MESI Check, move this check outside of this func?
+		if (dCache[addr.index].dWay[j].tag == addr.tag && dCache[addr.index].dWay[j].mesi != I) {
+			located = j;
+			break;
+		}
+	}
 
-       	// Tag found, update LRU for accessed tag
-        if (located != -1) {
-        	dCache[addr.index].dWay[located].LRU = MRU_VAL;  // Set LRU to MRU_VAL for accessed tag
-            // Decrement LRU values for other tags
-            for (int i = 0; i < DWAYNUM; i++) {
-                if (dCache[addr.index].dWay[i].valid == 1 && i != located && dCache[addr.index].dWay[i].LRU > 0) {
-                	dCache[addr.index].dWay[i].LRU--;
-                }
-            }
-        } else {
-            // Tag not found, find LRU entry or replace existing tag
-            int lru_loc = 0;
-            for (int i = 1; i < DWAYNUM; i++) {
-                if (dCache[addr.index].dWay[i].LRU < dCache[addr.index].dWay[lru_loc].LRU) {
-                    lru_loc = i;
-                }
-            }
-            // Check if the requested tag is already present
-            for (int i = 0; i < DWAYNUM; i++) {
-                if (dCache[addr.index].dWay[i].tag == addr.tag && dCache[addr.index].dWay[i].valid == 1) {
-                    lru_loc = i; // Update location to the existing tag
-                    break;
-                }
-            }
-            dCache[addr.index].dWay[lru_loc].valid = 1;
-            dCache[addr.index].dWay[lru_loc].tag = addr.tag;  // Update tag to the requested tag
-            dCache[addr.index].dWay[lru_loc].LRU = MRU_VAL;  // Set LRU to MRU_VAL for the new entry or existing tag
-            // Decrement LRU values for other valid entries
-            for (int i = 0; i < DWAYNUM; i++) {
-                if (dCache[addr.index].dWay[i].valid == 1 && i != lru_loc && dCache[addr.index].dWay[i].LRU > 0) {
-                	dCache[addr.index].dWay[i].LRU--;
-                }
-            }
-        }
-    }
+	if (located != -1) {
+		// Tag found, update LRU for accessed tag
+
+		// Set LRU to MRU_VAL for accessed tag
+		dCache[addr.index].dWay[located].LRU = MRU_VAL;
+
+		// Set MESI to S if MESI is E
+		MESI_Protocol(addr, located, 'd', 1, 1, 0, 0);
+
+		// Decrement LRU values for other tags
+		for (int i = 0; i < DWAYNUM; i++) {
+			if (/*dCache[addr.index].dWay[i].mesi == 1 &&*/ i != located && dCache[addr.index].dWay[i].LRU > 0) {
+				dCache[addr.index].dWay[i].LRU--;
+			}
+		}
+
+		return located;
+	} else {
+		// Tag not found,
+		// find Invalid way
+			// If multiple invalid ways, priorities LRU invalid
+			// If no invalid ways, next
+		// find LRU entry or replace existing tag
+
+		int lru_loc = 0;
+		int invalid = findInvalidWay(dCache[addr.index], 'd');
+
+		if (invalid == -1) {
+			// No invalid ways, find LRU
+
+			for (int i = 1; i < DWAYNUM; i++) {
+				if (dCache[addr.index].dWay[i].LRU < dCache[addr.index].dWay[lru_loc].LRU) {
+					lru_loc = i;
+				}
+			}
+
+			// !!! Do I need this function? !!!
+//				// Check if the requested tag is already present
+//				for (int i = 0; i < DWAYNUM; i++) {
+//					if (dCache[addr.index].dWay[i].tag == addr.tag && dCache[addr.index].dWay[i].valid == 1) {
+//						lru_loc = i; // Update location to the existing tag
+//						break;
+//					}
+//				}
+		} else {
+			// Invalid Way
+			lru_loc = invalid;
+		}
+
+		dCache[addr.index].dWay[lru_loc].mesi = E;
+		dCache[addr.index].dWay[lru_loc].tag = addr.tag;  // Update tag to the requested tag
+		dCache[addr.index].dWay[lru_loc].LRU = MRU_VAL;  // Set LRU to MRU_VAL for the new entry or existing tag
+
+		// Decrement LRU values for other valid entries
+		for (int i = 0; i < DWAYNUM; i++) {
+			if (/*dCache[addr.index].dWay[i].valid == 1 &&*/ i != lru_loc && dCache[addr.index].dWay[i].LRU > 0) {
+				dCache[addr.index].dWay[i].LRU--;
+			}
+		}
+
+		return lru_loc;
+	}
+
+    return -1;
 }
 
 
@@ -640,53 +769,78 @@ void LRU_Data(int request, struct address addr) {
 ** Version: v1.0.0
 ** Description: LRU Handling for INstruction Cache
 ****************************************************************************/
-void LRU_Instr(int request, struct address addr) {
-	int MRU_VAL = IWAYNUM - 1;
-	if (request >= 0 && request < 10) {		//For the commands 0-9 listed in the assignment
+int LRU_Instr(struct address addr) {
+    int MRU_VAL = IWAYNUM - 1;
+//	if (request >= 0 && request < 10) {		//For the commands 0-9 listed in the assignment
         int located = -1;					//Default value of -1
 
         // Check for cache hit
         for (int j = 0; j < IWAYNUM; j++) {														// Change to MESI Check, move this check outside of this func?
-            if (iCache[addr.index].iWay[j].tag == addr.tag && iCache[addr.index].iWay[j].valid == 1) {
+            if (iCache[addr.index].iWay[j].tag == addr.tag && iCache[addr.index].iWay[j].mesi != I) {
                 located = j;
                 break;
             }
         }
-       	// Tag found, update LRU for accessed tag
+
         if (located != -1) {
-        	iCache[addr.index].iWay[located].LRU = MRU_VAL;  // Set LRU to MRU_VAL for accessed tag
+        	// Tag found, update LRU for accessed tag
+
+        	// Set LRU to MRU_VAL for accessed tag
+        	iCache[addr.index].iWay[located].LRU = MRU_VAL;
+
+        	// Set MESI to S if MESI is E
+        	MESI_Protocol(addr, located, 'i', 1, 1, 0, 0);
+
             // Decrement LRU values for other tags
             for (int i = 0; i < IWAYNUM; i++) {
-                if (iCache[addr.index].iWay[i].valid == 1 && i != located && iCache[addr.index].iWay[i].LRU > 0) {
+                if (/*dCache[addr.index].iWay[i].mesi == 1 &&*/ i != located && iCache[addr.index].iWay[i].LRU > 0) {
                 	iCache[addr.index].iWay[i].LRU--;
                 }
             }
         } else {
-            // Tag not found, find LRU entry or replace existing tag
+            // Tag not found,
+        	// find Invalid way
+        		// If multiple invalid ways, priorities LRU invalid
+        		// If no invalid ways, next
+        	// find LRU entry or replace existing tag
+
             int lru_loc = 0;
-            for (int i = 1; i < IWAYNUM; i++) {
-                if (iCache[addr.index].iWay[i].LRU < iCache[addr.index].iWay[lru_loc].LRU) {
-                    lru_loc = i;
-                }
+            int invalid = findInvalidWay(iCache[addr.index], 'd');
+
+            if (invalid == -1) {
+            	// No invalid ways, find LRU
+
+            	for (int i = 1; i < IWAYNUM; i++) {
+					if (iCache[addr.index].iWay[i].LRU < iCache[addr.index].iWay[lru_loc].LRU) {
+						lru_loc = i;
+					}
+				}
+
+            	// !!! Do I need this function? !!!
+//				// Check if the requested tag is already present
+//				for (int i = 0; i < IWAYNUM; i++) {
+//					if (dCache[addr.index].iWay[i].tag == addr.tag && dCache[addr.index].iWay[i].valid == 1) {
+//						lru_loc = i; // Update location to the existing tag
+//						break;
+//					}
+//				}
+            } else {
+            	// Invalid Way
+            	lru_loc = invalid;
             }
-            // Check if the requested tag is already present
-            for (int i = 0; i < IWAYNUM; i++) {
-                if (iCache[addr.index].iWay[i].tag == addr.tag && iCache[addr.index].iWay[i].valid == 1) {
-                    lru_loc = i; // Update location to the existing tag
-                    break;
-                }
-            }
-            iCache[addr.index].iWay[lru_loc].valid = 1;
+
+            iCache[addr.index].iWay[lru_loc].mesi = E;
             iCache[addr.index].iWay[lru_loc].tag = addr.tag;  // Update tag to the requested tag
             iCache[addr.index].iWay[lru_loc].LRU = MRU_VAL;  // Set LRU to MRU_VAL for the new entry or existing tag
+
             // Decrement LRU values for other valid entries
             for (int i = 0; i < IWAYNUM; i++) {
-                if (iCache[addr.index].iWay[i].valid == 1 && i != lru_loc && iCache[addr.index].iWay[i].LRU > 0) {
+                if (/*dCache[addr.index].iWay[i].valid == 1 &&*/ i != lru_loc && iCache[addr.index].iWay[i].LRU > 0) {
                 	iCache[addr.index].iWay[i].LRU--;
                 }
             }
         }
-    }
+//    }
 }
 
 
@@ -710,5 +864,83 @@ void print_byteline_state(const char* message, union byteLine var,  char type) {
     }
     printf("\n");
 }
+
+
+
+
+
+/****************************************************************************
+** Function: MESI_Protocol
+** Authors: Jesus Zavala, modified by Kai Roy
+** Version: v1.0.0
+** Description: The function follows the state diagram that is shown in class
+****************************************************************************/
+int MESI_Protocol(struct address addr, int way, char type, int snoopBit, int readingData, int writingData, int invalidateData) {
+    //Create and load a local variable with the MESI state from the way.
+	enum MESI_STATE state;
+	if (type == 'i') {
+		state = iCache[addr.index].iWay[way].mesi;
+	} else {
+		state = dCache[addr.index].dWay[way].mesi;
+	}
+
+//Start of INVALID transitions
+    if 		 ((state = I) && (snoopBit = 1) && (readingData = 1)){
+        state = S;
+
+    }else if ((state = I) && (snoopBit = 0) && (readingData = 1)){
+        state = E;
+
+    }else if ((state = I) && (writingData = 1)){
+        state = M;
+//End of INVALID transitions
+
+//Start of EXCLUSIVE  transitions
+	}else if ((state = E) && (invalidateData = 1)){
+		state = I;
+
+    }else if ((state = E) && (readingData = 1)){
+        state = S;			// In this model, we assume that any read is from another processor, thus E -> S
+
+    }else if ((state = E) && (writingData = 1)){
+        state = M;
+//End of EXCLUSIVE transitions
+
+//Start of SHARED transitions
+    }else if ((state = S) && (invalidateData = 1)){
+        state = M;
+
+    }else if ((state = S) && (readingData = 1)){
+        state = S;
+//End of Exclusive transitions
+
+//Start of MODIFIED transitions
+    }else if ((state = M) && (invalidateData = 1)){
+    	state = I;
+
+    }else if ((state = M) && (readingData = 1)){
+        state = M;			// In this model, there is no M->S transition
+
+    }else if ((state = M) && (writingData = 1)){
+        state = M;
+//end of MODIFIED transitions
+
+    }else{
+		 printf("State not found - ERROR encountered.");
+		 exit(EXIT_FAILURE);
+    }
+
+    // Update the MESI state inside the way
+	if (type == 'i') {
+		iCache[addr.index].iWay[way].mesi = state;
+	} else {
+		dCache[addr.index].dWay[way].mesi = state;
+	}
+
+	return state;
+
+
+};
+
 
 
