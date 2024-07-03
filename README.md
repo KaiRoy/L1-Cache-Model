@@ -39,7 +39,7 @@ Both caches will be backed by a shared L2 Cache and will be using the MESI proto
 
 
 <!-- MESI Format-->
-**MESI Protocol:**
+**MESI Protocol:** \\
 To ensure that we keep a good cache coherence, we will be using one of the most widely used coherence protocols called the “MESI Protocol”. The MESI is an acronym that stands for the 4 states that a cache line can be marked with using two additional bits.
 
 - **M** : Modified means that the value in the cache is considered dirty. This means that this value is different from what is currently stored in main memory and no other processor caches contain the line. Once the data has been written back to main memory, this will change the state to S or Shared. 
@@ -48,7 +48,7 @@ To ensure that we keep a good cache coherence, we will be using one of the most 
 - **I** : Invalid means the current cache block is invalid and needs to be fetched from another cache or main memory since it does not hold a copy of the line. 
 
 <!-- Output Format/Modes -->
-**Output Modes:**
+**Output Modes:** \\
 The model requires the implementation of two different output modes. Mode 0 will simply summarize our usage statistics and provide responses to 9’s from the trace file. Mode 1 will display the simulated MESI communication to an L2 cache as well as all of the statistics from mode 0. 
 
 At the end of the simulation, the model will need to ouptut the following statistics:
