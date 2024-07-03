@@ -33,6 +33,7 @@ Both caches will be backed by a shared L2 Cache and will be using the MESI proto
 
 <!-- Structure -->
 <!-- Block Diagram -->	
+![System Block Diagram](Assets/BlockDiagram.png)
 
 <!-- Instruction Format -->
 
@@ -64,7 +65,6 @@ At the end of the simulation, the model will need to ouptut the following statis
 ## Designs
 
 <!-- Create a Block Diagram of the System?-->
-<!-- ![System Block Diagram](Assets/ECE%2044x%20Block%20Diagram.png) -->
 
 <!-- Design Implementation Choices-->
 From the required specifications of our device we can assume the following for dividing up our cache addresses.
