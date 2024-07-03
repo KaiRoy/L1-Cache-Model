@@ -36,11 +36,21 @@ Both caches will be backed by a shared L2 Cache and will be using the MESI proto
 
 <!-- Instruction Format -->
 
-<!-- Modes -->
+
+<!-- MESI Format-->
+**MESI Protocol:**
+To ensure that we keep a good cache coherence, we will be using one of the most widely used coherence protocols called the “MESI Protocol”. The MESI is an acronym that stands for the 4 states that a cache line can be marked with using two additional bits.
+
+- **M** : Modified means that the value in the cache is considered dirty. This means that this value is different from what is currently stored in main memory and no other processor caches contain the line. Once the data has been written back to main memory, this will change the state to S or Shared. 
+- **E** : Exclusive The value in the cache line is the same as the value in main memory meaning that it's clean and also no other processor has a copy of the cache item. Can be changed to shared state from a read or to modified state from a write. 
+- **S** : Shared means this cache line is stored in other caches and holds the most recent data copy and is considered clean meaning it is the same in main memory. 
+- **I** : Invalid means the current cache block is invalid and needs to be fetched from another cache or main memory since it does not hold a copy of the line. 
+
+<!-- Output Format/Modes -->
+**Output Modes:**
 The model requires the implementation of two different output modes. Mode 0 will simply summarize our usage statistics and provide responses to 9’s from the trace file. Mode 1 will display the simulated MESI communication to an L2 cache as well as all of the statistics from mode 0. 
 
-<!-- Output Format -->
-At the end of the simulation, the model will need to ouptut the following information:
+At the end of the simulation, the model will need to ouptut the following statistics:
 - Number of cache reads
 - Number of cache writes
 - Number of cache hits
@@ -60,37 +70,31 @@ At the end of the simulation, the model will need to ouptut the following inform
 From the required specifications of our device we can assume the following for dividing up our cache addresses.
 
 
-**Cache Addressing**
+**Cache Addressing:**
 - 32-bit processor = 32 address bits
 - \# of byte select bits (64 bytes /cache line)  = log2(M) = log2(64) = 6 bits
 - Cache contains 16K sets = 2^10 * 2^4 = 14 bits
 - \# of bits for tag = 32 - 6 - 14 = 12 bits
 
+| --- | --- | --- |
 | Address Tag [31:20] | Set Bits [19:6] | Offset [5:0] |
 
 
-**L1 Split Cache**
+
+**L1 Split Cache:**
 Since we are modeling a split cache, we have 2 separate caches, one for instructions and the other for data. The “Instruction cache” handles information going to the processor while the “Data cache” holds information to be written to memory. The level one indicates that this is the first level of cache that is present inside the processor. This level of cache typically ranges from 2KB to 64KB. 
 
-**L2 Cache**
+**L2 Cache:**
 This is our secondary memory cache that will usually be larger than the L1 Cache, but run at a slower speed. These types of caches can range from 256KB all the way to 32MB! We will be employing this level of cache in situations such as when we need to evict something from our L1 cache and we need to write back to the next level of cache which will be our L2 cache. 
 
 
 
-**Assumptions**
+**Assumptions:**
 We are not checking for data, only addresses.
 The first time the processor reads data, it goes to exclusive state because no other processor has any shared data.
 If a read miss occurs, the other L1 cache is checked and if it does not contain the data, main memory is accessed and writes to the cache. 
 If all cache lines are filled, we use the LRU cache line and evict it for new data. 
 
-
-**MESI Protocol**
-To ensure that we keep a good cache coherence, we will be using one of the most widely used coherence protocols called the “MESI Protocol”. The MESI is an acronym that stands for the 4 states that a cache line can be marked with using two additional bits.
-
-- **M** : Modified means that the value in the cache is considered dirty. This means that this value is different from what is currently stored in main memory and no other processor caches contain the line. Once the data has been written back to main memory, this will change the state to S or Shared. 
-- **E** : Exclusive The value in the cache line is the same as the value in main memory meaning that it's clean and also no other processor has a copy of the cache item. Can be changed to shared state from a read or to modified state from a write. 
-- **S** : Shared means this cache line is stored in other caches and holds the most recent data copy and is considered clean meaning it is the same in main memory. 
-- **I** : Invalid means the current cache block is invalid and needs to be fetched from another cache or main memory since it does not hold a copy of the line. 
 
 This cache will also be employing a snooping protocol or a way to check other memory transactions to know what is occurring.Our outermost cache will be snooping. This also uses states to determine whether the data in the cache needs to be updated and if data is fine to be written to the block of memory. 
 
