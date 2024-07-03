@@ -76,8 +76,8 @@ From the required specifications of our device we can assume the following for d
 - Cache contains 16K sets = 2^10 * 2^4 = 14 bits
 - \# of bits for tag = 32 - 6 - 14 = 12 bits
 
-| --- | --- | --- |
 | Address Tag [31:20] | Set Bits [19:6] | Offset [5:0] |
+| --- | --- | --- |
 
 
 
