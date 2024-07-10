@@ -60,8 +60,8 @@ At the end of the simulation, the model will need to ouptut the following statis
 - Number of cache misses
 - Cache hit ratio
 
-
 <!-- Insert Image of Format? -->
+
 
 
 ## Designs
@@ -101,19 +101,30 @@ The first time the processor reads data, it goes to exclusive state because no o
 If a read miss occurs, the other L1 cache is checked and if it does not contain the data, main memory is accessed and writes to the cache. 
 If all cache lines are filled, we use the LRU cache line and evict it for new data. 
 
-
 This cache will also be employing a snooping protocol or a way to check other memory transactions to know what is occurring.Our outermost cache will be snooping. This also uses states to determine whether the data in the cache needs to be updated and if data is fine to be written to the block of memory. 
 
+
+**Variable Structure**
+The core of the model revolves around the structs used to create the Cache structure. The "way" struct contains the valid, tag, Mesi, LRU, and data variables. An array of the "way" struct is used in a union to allow for different size arrays for the instruction and data caches are split into a different number of sets. This is helpful as only a single variable is needed to create both the Instuction and Data Caches. 
+
+The "address" struct contains four variables; hex, tag, index, and byteOffset. The hex variable is a character array and is used for the trace file handling and is used to assign values to the remaining three variables which are used everywhere else in the program. 
+
+**Function Structure**
+The functions can be split into four main categories in the model: Trace File, Cache, LRU, and MESI. Each cache command has its own function, with additional functions for initialization and printing. 
+
+The Trace File Handler extracts the command code, tag, index, and byte offset from each line of the trace file until no more lines exist. The command code is used to determine which cache function needs to be run next. 
 
 
 ## Current State of the Project
 
-By the end of the project, our model was able to provided the expected output for both the trace files provided for testing and for the demo. Only minor modifications were needed for the file handling for the demo trace file. 
+By the end of the project, our model was able to provided the expected output for both the trace files provided for testing and for the demo. Only minor modifications were needed for the file handling for the demo trace file.
 
 
 ## Post Project Notes
 
-
+There are two main continuations that can be made to this project:
+- Converting the model to function with SystemC
+- Creating an SystemVerilog Model and verify it with the current model
 
 
 ## Installation
@@ -150,4 +161,3 @@ If your project has a lot of features, list them here.
 - Kamal Smith
 - Jesus Zavala
 - Daisy Perez
-
